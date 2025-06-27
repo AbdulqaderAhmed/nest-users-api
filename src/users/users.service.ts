@@ -10,6 +10,11 @@ export class UsersService {
 
   async findAll(role?: 'USER' | 'ADMIN') {
     if (role) {
+      // Validate role before querying database
+      if (role !== 'USER' && role !== 'ADMIN') {
+        throw new NotFoundException("No user's with this role found");
+      }
+
       const roleArray = await this.userModel.findOne({ where: { role } });
 
       if (!roleArray)

@@ -1,4 +1,4 @@
-import { Table, Column, Model, DataType } from 'sequelize-typescript';
+import { Column, DataType, Model, Table } from 'sequelize-typescript';
 import { UserRole } from './user-role.enum';
 
 @Table({
@@ -6,21 +6,21 @@ import { UserRole } from './user-role.enum';
 })
 export class User extends Model {
   @Column
-  name: string;
+  declare name: string;
 
   @Column({
     unique: true,
     type: DataType.STRING,
   })
-  email: string;
+  declare email: string;
 
   @Column({
     type: DataType.STRING,
   })
-  password: string;
+  declare password: string;
 
   @Column({
     type: DataType.ENUM(...Object.values(UserRole)),
   })
-  role: UserRole;
+  declare role: UserRole;
 }
