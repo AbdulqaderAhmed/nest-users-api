@@ -35,9 +35,7 @@ export class UsersService {
 
     if (exsitingUser) throw new NotFoundException('Email already exists');
 
-    const newUser = await this.userModel.create({
-      ...createUserDto,
-    } as User);
+    const newUser = await this.userModel.create({ ...createUserDto });
     return newUser;
   }
 

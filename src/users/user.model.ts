@@ -1,28 +1,26 @@
-import {
-  Column,
-  IsEmail,
-  Min,
-  Model,
-  Table,
-  Unique,
-} from 'sequelize-typescript';
+import { Table, Column, Model, DataType } from 'sequelize-typescript';
+import { UserRole } from './user-role.enum';
 
 @Table({
   tableName: 'users',
 })
-export class User extends Model<User> {
+export class User extends Model {
   @Column
   name: string;
 
-  @IsEmail
-  @Unique
-  @Column
+  @Column({
+    unique: true,
+    type: DataType.STRING,
+  })
   email: string;
 
-  @Min(8)
-  @Column
+  @Column({
+    type: DataType.STRING,
+  })
   password: string;
 
-  @Column
-  role: 'USER' | 'ADMIN';
+  @Column({
+    type: DataType.ENUM(...Object.values(UserRole)),
+  })
+  role: UserRole;
 }
