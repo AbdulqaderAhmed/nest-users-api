@@ -1,10 +1,11 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { INestApplication } from '@nestjs/common';
+import { INestApplication, ValidationPipe } from '@nestjs/common';
 import * as request from 'supertest';
 import { AppModule } from '../src/app.module';
 import { UserRole } from '../src/users/user-role.enum';
 import { Sequelize } from 'sequelize-typescript';
 import { User } from '../src/users/user.model';
+import { App } from 'supertest/types';
 
 describe('UsersController (e2e)', () => {
   let app: INestApplication;
@@ -16,26 +17,35 @@ describe('UsersController (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.useGlobalPipes(
+      new ValidationPipe({
+        whitelist: true,
+        forbidNonWhitelisted: true,
+        transform: true,
+      }),
+    );
     sequelize = moduleFixture.get<Sequelize>(Sequelize);
     await app.init();
   });
 
   beforeEach(async () => {
-    // Clear the database before each test
-    await sequelize.getQueryInterface().dropTable('Users', { force: true });
     await sequelize.sync({ force: true });
   });
 
+  afterAll(async () => {
+    await app.close();
+    await sequelize.close();
+  });
+
   it('GET /users should return all users', async () => {
-    // Seed a user
     await User.create({
       name: 'Test User',
       email: 'test@example.com',
-      password: 'hashedpassword123', // Assume password is hashed in service
+      password: 'hashedpassword123',
       role: UserRole.USER,
     });
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .get('/users')
       .expect(200)
       .expect((res) => {
@@ -57,7 +67,7 @@ describe('UsersController (e2e)', () => {
       role: UserRole.ADMIN,
     });
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .get('/users?role=ADMIN')
       .expect(200)
       .expect((res) => {
@@ -70,7 +80,7 @@ describe('UsersController (e2e)', () => {
   });
 
   it('GET /users?role=INVALID should throw NotFoundException', async () => {
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .get('/users?role=INVALID')
       .expect(404)
       .expect((res) => {
@@ -88,7 +98,7 @@ describe('UsersController (e2e)', () => {
       role: UserRole.USER,
     });
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .get(`/users/${user.id}`)
       .expect(200)
       .expect((res) => {
@@ -101,8 +111,8 @@ describe('UsersController (e2e)', () => {
   });
 
   it('GET /users/:id should throw NotFoundException for invalid ID', async () => {
-    return request(app.getHttpServer())
-      .get('/users/999')
+    return request(app.getHttpServer() as App)
+      .get('/users/999999')
       .expect(404)
       .expect((res) => {
         expect((res.body as { message: string }).message).toBe(
@@ -119,7 +129,7 @@ describe('UsersController (e2e)', () => {
       role: UserRole.USER,
     };
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .post('/users')
       .send(createUserDto)
       .expect(201)
@@ -147,7 +157,7 @@ describe('UsersController (e2e)', () => {
       role: UserRole.USER,
     };
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .post('/users')
       .send(createUserDto)
       .expect(404)
@@ -171,7 +181,7 @@ describe('UsersController (e2e)', () => {
       role: UserRole.ADMIN,
     };
 
-    return request(app.getHttpServer())
+    return request(app.getHttpServer() as App)
       .patch(`/users/${user.id}`)
       .send(updateUserDto)
       .expect(200)
@@ -185,11 +195,9 @@ describe('UsersController (e2e)', () => {
   });
 
   it('PATCH /users/:id should throw NotFoundException for invalid ID', async () => {
-    const updateUserDto = { name: 'Updated User' };
-
-    return request(app.getHttpServer())
-      .patch('/users/999')
-      .send(updateUserDto)
+    return request(app.getHttpServer() as App)
+      .patch('/users/999999')
+      .send({ name: 'Updated User' })
       .expect(404)
       .expect((res) => {
         expect((res.body as { message: string }).message).toBe(
@@ -206,12 +214,14 @@ describe('UsersController (e2e)', () => {
       role: UserRole.USER,
     });
 
-    return request(app.getHttpServer()).delete(`/users/${user.id}`).expect(200);
+    return request(app.getHttpServer() as App)
+      .delete(`/users/${user.id}`)
+      .expect(200);
   });
 
   it('DELETE /users/:id should throw NotFoundException for invalid ID', async () => {
-    return request(app.getHttpServer())
-      .delete('/users/999')
+    return request(app.getHttpServer() as App)
+      .delete('/users/999999')
       .expect(404)
       .expect((res) => {
         expect((res.body as { message: string }).message).toBe(
@@ -220,8 +230,129 @@ describe('UsersController (e2e)', () => {
       });
   });
 
-  afterAll(async () => {
-    await app.close();
-    await sequelize.close();
+  describe('Input Validation Tests', () => {
+    it('POST /users should return 400 for invalid email format', async () => {
+      return request(app.getHttpServer() as App)
+        .post('/users')
+        .send({
+          name: 'Test User',
+          email: 'invalid-email',
+          password: 'password123',
+          role: UserRole.USER,
+        })
+        .expect(400)
+        .expect((res) => {
+          expect((res.body as { message: string }).message).toContain(
+            'Invalid email format',
+          );
+        });
+    });
+
+    it('POST /users should return 400 for short password', async () => {
+      return request(app.getHttpServer() as App)
+        .post('/users')
+        .send({
+          name: 'Test User',
+          email: 'test@example.com',
+          password: '123',
+          role: UserRole.USER,
+        })
+        .expect(400)
+        .expect((res) => {
+          expect((res.body as { message: string }).message).toContain(
+            'Password must be at least 8 characters long',
+          );
+        });
+    });
+
+    it('POST /users should return 400 for missing required fields', async () => {
+      return request(app.getHttpServer() as App)
+        .post('/users')
+        .send({ email: 'test@example.com' })
+        .expect(400)
+        .expect((res) => {
+          expect((res.body as { message: string }).message).toContain(
+            'Name is required',
+          );
+        });
+    });
+
+    it('POST /users should return 400 for invalid role', async () => {
+      return request(app.getHttpServer() as App)
+        .post('/users')
+        .send({
+          name: 'Test User',
+          email: 'test@example.com',
+          password: 'password123',
+          role: 'INVALID_ROLE',
+        })
+        .expect(400)
+        .expect((res) => {
+          expect((res.body as { message: string }).message).toContain(
+            'Role must be either USER or ADMIN',
+          );
+        });
+    });
+  });
+
+  describe('Query Parameter Tests', () => {
+    it('GET /users should handle case-sensitive role queries', async () => {
+      return request(app.getHttpServer() as App)
+        .get('/users?role=admin')
+        .expect(404);
+    });
+
+    it('GET /users should handle multiple query parameters', async () => {
+      return request(app.getHttpServer() as App)
+        .get('/users?role=USER&limit=10')
+        .expect(200);
+    });
+
+    it('GET /users should handle special characters in role', async () => {
+      return request(app.getHttpServer() as App)
+        .get('/users?role=USER%20ADMIN')
+        .expect(404);
+    });
+  });
+
+  describe('Concurrent Operations Tests', () => {
+    it('should handle concurrent user creation', async () => {
+      const userPromises = Array.from({ length: 5 }, (_, i) =>
+        request(app.getHttpServer() as App)
+          .post('/users')
+          .send({
+            name: `User${i}`,
+            email: `user${i}@example.com`,
+            password: 'password123',
+            role: UserRole.USER,
+          }),
+      );
+
+      const results = await Promise.all(userPromises);
+      results.forEach((result) => {
+        expect(result.status).toBe(201);
+      });
+    });
+
+    it('should handle concurrent updates to same user', async () => {
+      const user = await User.create({
+        name: 'Test User',
+        email: 'test@example.com',
+        password: 'hashedpassword123',
+        role: UserRole.USER,
+      });
+
+      const updatePromises = [
+        request(app.getHttpServer() as App)
+          .patch(`/users/${user.id}`)
+          .send({ name: 'Updated Name 1' }),
+        request(app.getHttpServer() as App)
+          .patch(`/users/${user.id}`)
+          .send({ name: 'Updated Name 2' }),
+      ];
+
+      const results = await Promise.all(updatePromises);
+      results.forEach((res) => expect(res.status).toBe(200));
+    });
   });
 });

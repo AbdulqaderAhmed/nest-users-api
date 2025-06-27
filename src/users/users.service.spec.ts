@@ -76,6 +76,55 @@ describe('UsersService', () => {
         new NotFoundException("No user's with this role found"),
       );
     });
+
+    // Add these tests to your existing UsersService test suite
+
+    describe('findAll with invalid role', () => {
+      it('should throw NotFoundException for invalid role', async () => {
+        await expect(service.findAll('INVALID_ROLE' as any)).rejects.toThrow(
+          new NotFoundException("No user's with this role found"),
+        );
+      });
+
+      it('should handle empty string role', async () => {
+        await expect(service.findAll('' as any)).rejects.toThrow(
+          new NotFoundException("No user's with this role found"),
+        );
+      });
+
+      it('should handle null role parameter', async () => {
+        const mockUsers = [{ id: 1, name: 'User1', role: 'USER' }];
+        userModel.findAll.mockResolvedValue(mockUsers);
+
+        const result = await service.findAll(null as any);
+        expect(result).toEqual(mockUsers);
+      });
+    });
+
+    describe('edge cases', () => {
+      it('should handle database connection errors', async () => {
+        userModel.findAll.mockRejectedValue(
+          new Error('Database connection failed'),
+        );
+
+        await expect(service.findAll()).rejects.toThrow(
+          'Database connection failed',
+        );
+      });
+
+      it('should handle large user datasets', async () => {
+        const mockUsers = Array.from({ length: 1000 }, (_, i) => ({
+          id: i + 1,
+          name: `User${i + 1}`,
+          email: `user${i + 1}@example.com`,
+          role: i % 2 === 0 ? UserRole.USER : UserRole.ADMIN,
+        }));
+        userModel.findAll.mockResolvedValue(mockUsers);
+
+        const result = await service.findAll();
+        expect(result).toHaveLength(1000);
+      });
+    });
   });
 
   describe('findOne', () => {
